@@ -5,8 +5,10 @@ from json import dumps
 
 # This dictionary contains any kwargs that are to be passed to the json.dumps
 # function, used below.
-settings = {}
-
+settings = {
+    'ensure_ascii' : False,
+    'encoding' : 'utf-8',
+}
 
 def output_json(data, code, headers=None):
     """Makes a Flask response with a JSON encoded body"""
@@ -27,4 +29,7 @@ def output_json(data, code, headers=None):
 
     resp = make_response(dumped, code)
     resp.headers.extend(headers or {})
+
+    # broken utf8 string display bug fix on chrome browser
+    resp.headers['Content-Type'] = 'application/json; charset=utf-8'
     return resp

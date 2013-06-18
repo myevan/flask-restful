@@ -257,7 +257,6 @@ class Api(object):
         for mediatype in self.mediatypes() + [self.default_mediatype]:
             if mediatype in self.representations:
                 resp = self.representations[mediatype](data, *args, **kwargs)
-                resp.headers['Content-Type'] = mediatype
                 return resp
 
     def mediatypes(self):
@@ -327,7 +326,6 @@ class Resource(MethodView):
             if mediatype in representations:
                 data, code, headers = unpack(resp)
                 resp = representations[mediatype](data, code, headers)
-                resp.headers['Content-Type'] = mediatype
                 return resp
 
         return resp
