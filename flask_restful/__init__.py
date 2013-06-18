@@ -1,3 +1,4 @@
+import traceback
 import difflib
 from functools import wraps, partial
 import re
@@ -153,28 +154,55 @@ class Api(object):
         """
         got_request_exception.send(self.app, exception=e)
 
-        code = getattr(e, 'code', 500)
-        data = getattr(e, 'data', error_data(code))
+        if 1:
+            if isinstance(e,  HTTPException):
+                code = e.code
+            else:
+                self.app.logger.exception("Internal Error")
+                code = 500
 
-        if code >= 500:
-            self.app.logger.exception("Internal Error")
+            errord = {
+                'request' : {
+                    'path' : request.path,
+                    'args' : request.args,
+                    'json' : request.json,
+                },
+                'status' : {
+                    'code' : code,
+                    'message' : HTTP_STATUS_CODES.get(code, ''),
+                },
+            }
 
-        if code == 404 and ('message' not in data or
-                            data['message'] == HTTP_STATUS_CODES[404]):
-            rules = dict([(re.sub('(<.*>)', '', rule.rule), rule.rule)
-                          for rule in self.app.url_map.iter_rules()])
-            close_matches = difflib.get_close_matches(request.path, rules.keys())
-            if close_matches:
-                # If we already have a message, add punctuation and continue it.
-                if "message" in data:
-                    data["message"] += ". "
-                else:
-                    data["message"] = ""
+            if code == 500:
+                errord['traceback'] = traceback.format_exc().splitlines()
 
-                data['message'] += 'You have requested this URI [' + request.path + \
-                        '] but did you mean ' + \
-                        ' or '.join((rules[match]
-                                     for match in close_matches)) + ' ?'
+            data = {
+                'error' : errord,
+            }
+
+        else:
+            code = getattr(e, 'code', 500)
+            data = getattr(e, 'data', error_data(code))
+
+            if code >= 500:
+                self.app.logger.exception("Internal Error")
+
+            if code == 404 and ('message' not in data or
+                                data['message'] == HTTP_STATUS_CODES[404]):
+                rules = dict([(re.sub('(<.*>)', '', rule.rule), rule.rule)
+                              for rule in self.app.url_map.iter_rules()])
+                close_matches = difflib.get_close_matches(request.path, rules.keys())
+                if close_matches:
+                    # If we already have a message, add punctuation and continue it.
+                    if "message" in data:
+                        data["message"] += ". "
+                    else:
+                        data["message"] = ""
+
+                    data['message'] += 'You have requested this URI [' + request.path + \
+                            '] but did you mean ' + \
+                            ' or '.join((rules[match]
+                                         for match in close_matches)) + ' ?'
 
         resp = self.make_response(data, code)
 
