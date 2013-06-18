@@ -163,6 +163,7 @@ class Api(object):
 
             errord = {
                 'request' : {
+                    'method' : request.method,
                     'path' : request.path,
                     'args' : request.args,
                     'json' : request.json,
