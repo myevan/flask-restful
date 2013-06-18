@@ -289,6 +289,21 @@ class Api(object):
             return func
         return wrapper
 
+    def route(self, rule):
+        """A decorator that is used register a resource class for a given URI rule
+
+        Ex::
+            @api.route('/')
+            class Hello(Resource):
+                def get(self):
+                    return {
+                        'hello' : 'world'
+                    }
+        """
+        def wrapper(cls):
+            self.add_resource(cls, rule)
+            return cls
+        return wrapper
 
 class Resource(MethodView):
     """
