@@ -6,6 +6,15 @@ Flask-RESTful provides the building blocks for creating a great REST API.
 
 ## New Features
 
+### API Routing Decorator
+
+    @api.route('/')
+    class HelloResource(Resource):
+        def get(self):
+            return {
+                'hello' : 'world',
+            }
+
 ### UTF8 JSON Representation
 
 #### Code
@@ -16,13 +25,15 @@ Flask-RESTful provides the building blocks for creating a great REST API.
                 'hello' : u'안녕하세요',
             }
     
-#### Old JSON Representation
+#### Output
+
+Old JSON Representation
 
     {
         'hello' : u'\uc548\ub155\ud558\uc138\uc694',
     }    
 
-#### New JSON Representation
+New JSON Representation
 
     {
         'hello' : '안녕하세요',
@@ -30,19 +41,32 @@ Flask-RESTful provides the building blocks for creating a great REST API.
 
 #### Note
 
-    
+Old Representation Customizing
 
-### API Routing Decorator
+    @api.representation('application/xml')
+    def xml(data, code, headers):
+        resp = make_response(convert_data_to_xml(data), code)
+        resp.headers.extend(headers)
+        return resp
+        
+New Representation Customizing
 
-    @api.route('/')
-    class HelloResource(Resource):
-        def get(self):
-            return {
-                'hello' : 'world',
-            }
+    @api.representation('application/xml')
+    def xml(data, code, headers):
+        resp = make_response(convert_data_to_xml(data), code)
+        resp.headers.extend(headers)
 
+        resp.headers['Content-Type'] = 'application/xml; charset=utf-8'
+        return resp
+        
 
-    
+### API Error Representation
+
+    @api.error_representation('application/json')
+    def error_json(e):
+        return output_json({
+            'error' : repr(e),
+            }, 500)    
 
 ## User Guide
 
