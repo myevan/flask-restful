@@ -1,15 +1,12 @@
 import traceback
-import difflib
 from functools import wraps, partial
-import re
 from flask import request, Response
 from flask import abort as original_flask_abort
 from flask.views import MethodView
 from flask.signals import got_request_exception
 from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound
-from werkzeug.http import HTTP_STATUS_CODES
-from flask.ext.restful.utils import unauthorized, error_data, unpack
-from flask.ext.restful.representations.json import output_json
+from flask.ext.restful.utils import unpack
+from flask.ext.restful.representations.json import output_json, error_json
 
 try:
     #noinspection PyUnresolvedReferences
@@ -33,6 +30,7 @@ def abort(http_status_code, **kwargs):
         raise e
 
 DEFAULT_REPRESENTATIONS = {'application/json': output_json}
+DEFAULT_ERROR_REPRESENTATIONS = {'application/json': error_json}
 
 
 class Api(object):
@@ -63,6 +61,8 @@ class Api(object):
     def __init__(self, app=None, prefix='',
                  default_mediatype='application/json', decorators=None,
                  catch_all_404s=False):
+
+        self.error_representations = dict(DEFAULT_ERROR_REPRESENTATIONS)
         self.representations = dict(DEFAULT_REPRESENTATIONS)
         self.urls = {}
         self.prefix = prefix
@@ -154,64 +154,10 @@ class Api(object):
         """
         got_request_exception.send(self.app, exception=e)
 
-        if 1:
-            if isinstance(e,  HTTPException):
-                code = e.code
-            else:
-                self.app.logger.exception("Internal Error")
-                code = 500
-
-            errord = {
-                'request' : {
-                    'method' : request.method,
-                    'path' : request.path,
-                    'args' : request.args,
-                    'json' : request.json,
-                },
-                'status' : {
-                    'code' : code,
-                    'message' : HTTP_STATUS_CODES.get(code, ''),
-                },
-            }
-
-            if code == 500:
-                errord['traceback'] = traceback.format_exc().splitlines()
-
-            data = {
-                'error' : errord,
-            }
-
-        else:
-            code = getattr(e, 'code', 500)
-            data = getattr(e, 'data', error_data(code))
-
-            if code >= 500:
-                self.app.logger.exception("Internal Error")
-
-            if code == 404 and ('message' not in data or
-                                data['message'] == HTTP_STATUS_CODES[404]):
-                rules = dict([(re.sub('(<.*>)', '', rule.rule), rule.rule)
-                              for rule in self.app.url_map.iter_rules()])
-                close_matches = difflib.get_close_matches(request.path, rules.keys())
-                if close_matches:
-                    # If we already have a message, add punctuation and continue it.
-                    if "message" in data:
-                        data["message"] += ". "
-                    else:
-                        data["message"] = ""
-
-                    data['message'] += 'You have requested this URI [' + request.path + \
-                            '] but did you mean ' + \
-                            ' or '.join((rules[match]
-                                         for match in close_matches)) + ' ?'
-
-        resp = self.make_response(data, code)
-
-        if code == 401:
-            resp = unauthorized(resp,
-                self.app.config.get("HTTP_BASIC_AUTH_REALM", "flask-restful"))
-
-        return resp
+        for mediatype in self.mediatypes() + [self.default_mediatype]:
+            if mediatype in self.representations:
+                resp = self.error_representations[mediatype](e)
+                return resp
 
     def mediatypes_method(self):
         """Return a method that returns a list of mediatypes
@@ -332,6 +278,32 @@ class Api(object):
         def wrapper(cls):
             self.add_resource(cls, rule)
             return cls
+        return wrapper
+
+    def error_representation(self, mediatype):
+        """Changes error representation transformers to be declared for the
+        api. Transformers are functions that must be decorated with this
+        method, passing the mediatype the transformer represents. Three 
+        arguments are passed to the transformer:
+
+        * The data to be represented in the response body
+        * The http status code
+        * A dictionary of headers
+
+        The transformer should convert the data appropriately for the mediatype
+        and return a Flask response object.
+
+        Ex::
+
+            @api.error_representation('application/json')
+            def error_json(code):
+                resp = make_response(convert_data_to_json(code), code)
+                resp.headers.extend(headers)
+                return resp
+        """
+        def wrapper(func):
+            self.error_representations[mediatype] = func
+            return func
         return wrapper
 
 class Resource(MethodView):
